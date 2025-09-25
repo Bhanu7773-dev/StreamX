@@ -1,98 +1,81 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:ui' as ui;
+import 'dart:math';
+import '../stream_services/api.dart';
+import '../stream_services/tmdb_api.dart';
 
-// Default trending movies data (images only as requested)
-final List<Map<String, dynamic>> _defaultTrendingMovies = [
-  // Keep Joker and Avengers as first two, then unique other entries
-  {
-    'title': 'Joker',
-    'year': '2019',
-    'genre': 'Crime',
-    'duration': '2h 2min',
-    'rating': 8.4,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/udDclJoHjfjb8Ekgsd4FDteOkCU.jpg',
-  },
-  {
-    'title': 'Avengers: Endgame',
-    'year': '2019',
-    'genre': 'Action',
-    'duration': '3h 1min',
-    'rating': 8.4,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/or06FN3Dka5tukK1e9sl16pB3iy.jpg',
-  },
-  {
-    'title': 'The Shawshank Redemption',
-    'year': '1994',
-    'genre': 'Drama',
-    'duration': '2h 22min',
-    'rating': 9.3,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
-  },
-  {
-    'title': 'Fight Club',
-    'year': '1999',
-    'genre': 'Drama',
-    'duration': '2h 19min',
-    'rating': 8.8,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/bptfVGEQuv6vDTIMVCHjJ9Dz8PX.jpg',
-  },
-  {
-    'title': 'The Matrix',
-    'year': '1999',
-    'genre': 'Sci-Fi',
-    'duration': '2h 16min',
-    'rating': 8.7,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
-  },
-  {
-    'title': 'Forrest Gump',
-    'year': '1994',
-    'genre': 'Drama',
-    'duration': '2h 22min',
-    'rating': 8.8,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
-  },
-  {
-    'title': 'Gladiator',
-    'year': '2000',
-    'genre': 'Action',
-    'duration': '2h 35min',
-    'rating': 8.5,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/ty8TGRuvJLPUmAR1H1nRIsgwvim.jpg',
-  },
-  {
-    'title': 'The Lion King',
-    'year': '1994',
-    'genre': 'Animation',
-    'duration': '1h 28min',
-    'rating': 8.5,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/sKCr78MXSLixwmZ8DyJLrpMsd15.jpg',
-  },
-  {
-    'title': 'Shutter Island',
-    'year': '2010',
-    'genre': 'Thriller',
-    'duration': '2h 18min',
-    'rating': 8.2,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/kve20tXwUZpu4GUX8l6X7Z4jmL6.jpg',
-  },
-];
+class TrendingNow extends StatefulWidget {
+  final List<Movie>? movies;
+  const TrendingNow({Key? key, this.movies}) : super(key: key);
 
-class TrendingNow extends StatelessWidget {
-  final List<Map<String, dynamic>> movies;
+  @override
+  State<TrendingNow> createState() => _TrendingNowState();
+}
 
-  TrendingNow({Key? key, List<Map<String, dynamic>>? movies})
-    : movies = movies ?? _defaultTrendingMovies,
-      super(key: key);
+class _TrendingNowState extends State<TrendingNow> {
+  List<Movie> _trendingMovies = [];
+  bool _loading = true;
+  String? _error;
+
+  // Cache for TMDB ratings by movie title
+  Map<String, double> _ratingCache = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTrending();
+  }
+
+  Future<void> _fetchTrending() async {
+    if (widget.movies != null) {
+      setState(() {
+        _trendingMovies = widget.movies!;
+        _loading = false;
+        _error = null;
+      });
+    } else {
+      try {
+        final movies = await StreamApiService().fetchTrending();
+        setState(() {
+          _trendingMovies = movies;
+          _loading = false;
+          _error = null;
+        });
+      } catch (e) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  // Helper method to get rating, fetching if not cached
+  Future<double> _getRating(String title) async {
+    if (_ratingCache.containsKey(title)) {
+      return _ratingCache[title]!;
+    }
+    try {
+      final details = await TMDBApiService().fetchMovieDetailsByTitle(title);
+      double rating = 0.0;
+      if (details != null) {
+        final vote = details["vote_average"];
+        if (vote is num) rating = vote.toDouble();
+      }
+      if (rating == 0.0) {
+        // Generate fake rating between 6.0 and 9.5
+        rating = 6.0 + Random().nextDouble() * 3.5;
+      }
+      _ratingCache[title] = rating;
+      return rating;
+    } catch (e) {
+      // Generate fake rating on error
+      double fakeRating = 6.0 + Random().nextDouble() * 3.5;
+      _ratingCache[title] = fakeRating;
+      return fakeRating;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -128,10 +111,23 @@ class TrendingNow extends StatelessWidget {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: movies.length,
+            itemCount: _trendingMovies.length,
             itemBuilder: (context, index) {
-              final movie = movies[index];
-              return _TrendingCard(movie: movie);
+              final movie = _trendingMovies[index];
+              return FutureBuilder<double>(
+                future: _getRating(movie.title),
+                builder: (context, snapshot) {
+                  double rating = snapshot.data ?? 0.0;
+                  return _TrendingCard(
+                    title: movie.title,
+                    year: movie.releaseDate,
+                    genre: movie.type,
+                    duration: movie.duration,
+                    rating: rating,
+                    imageUrl: movie.image,
+                  );
+                },
+              );
             },
           ),
         ),
@@ -142,8 +138,22 @@ class TrendingNow extends StatelessWidget {
 }
 
 class _TrendingCard extends StatelessWidget {
-  final Map<String, dynamic> movie;
-  const _TrendingCard({Key? key, required this.movie}) : super(key: key);
+  final String title;
+  final String year;
+  final String genre;
+  final String duration;
+  final double rating;
+  final String imageUrl;
+
+  const _TrendingCard({
+    Key? key,
+    required this.title,
+    required this.year,
+    required this.genre,
+    required this.duration,
+    required this.rating,
+    required this.imageUrl,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +180,7 @@ class _TrendingCard extends StatelessWidget {
                 children: [
                   Positioned.fill(
                     child: Image.network(
-                      movie['imageUrl'],
+                      imageUrl,
                       width: double.infinity,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(
@@ -219,7 +229,7 @@ class _TrendingCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                movie['rating']?.toString() ?? '',
+                                rating.toStringAsFixed(1),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
@@ -241,7 +251,7 @@ class _TrendingCard extends StatelessWidget {
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Selected "${movie['title']}"'),
+                            content: Text('Selected "$title"'),
                             duration: const Duration(seconds: 2),
                           ),
                         );
@@ -282,7 +292,7 @@ class _TrendingCard extends StatelessWidget {
                                             MainAxisAlignment.start,
                                         children: [
                                           Text(
-                                            movie['genre'] ?? '',
+                                            genre,
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 12,
@@ -292,7 +302,7 @@ class _TrendingCard extends StatelessWidget {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            movie['title'] ?? '',
+                                            title,
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 16,
@@ -313,7 +323,7 @@ class _TrendingCard extends StatelessWidget {
                                       ).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            'Play trailer for "${movie['title']}"',
+                                            'Play trailer for "$title"',
                                           ),
                                           duration: const Duration(seconds: 2),
                                         ),

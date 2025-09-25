@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import '../home_widgets/movie_card_section.dart'; // Update this import
 import '../home_widgets/trending_section.dart';
+import '../hybrrid/navbar.dart';
+import '../stream_services/api.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final List<Movie> carouselMovies;
+  final List<Movie> remainingMovies;
+  const HomePage({
+    super.key,
+    required this.carouselMovies,
+    required this.remainingMovies,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -12,23 +20,32 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
-  // sample movies moved to movie_card_section.dart
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      extendBody: true,
+      backgroundColor: Colors.transparent,
       appBar: _buildAppBar(),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
           _buildHomePage(),
-          _buildTVShowsPage(),
           _buildSearchPage(),
+          _buildFavoritesPage(),
           _buildSettingsPage(),
         ],
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: StreamXNavBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+        ),
+      ),
     );
   }
 
@@ -90,10 +107,10 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Circular Movie Carousel (no header)
-          CircularMovieCarousel(),
+          CircularMovieCarousel(movies: widget.carouselMovies),
 
           // Trending Section moved to home_widgets/trending_section.dart
-          TrendingNow(),
+          TrendingNow(movies: widget.remainingMovies),
         ],
       ),
     );
@@ -101,15 +118,15 @@ class _HomePageState extends State<HomePage> {
 
   // _buildTrendingCard was moved to `home_widgets/trending_section.dart`.
 
-  Widget _buildTVShowsPage() {
+  Widget _buildFavoritesPage() {
     return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.tv, size: 80, color: Colors.white24),
+          Icon(Icons.favorite, size: 80, color: Colors.redAccent),
           SizedBox(height: 16),
           Text(
-            "TV Shows Page",
+            "Favorites",
             style: TextStyle(
               fontSize: 22,
               color: Colors.white,
@@ -118,7 +135,7 @@ class _HomePageState extends State<HomePage> {
           ),
           SizedBox(height: 8),
           Text(
-            "Coming Soon!",
+            "Your favorite movies will appear here",
             style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
         ],
@@ -173,44 +190,6 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-    );
-  }
-
-  BottomNavigationBar _buildBottomNavigationBar() {
-    return BottomNavigationBar(
-      currentIndex: _selectedIndex,
-      onTap: (index) {
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
-      type: BottomNavigationBarType.fixed,
-      backgroundColor: const Color(0xFF161B22),
-      selectedItemColor: const Color(0xFF6366F1),
-      unselectedItemColor: Colors.grey[600],
-      elevation: 0,
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home_outlined),
-          activeIcon: Icon(Icons.home),
-          label: "Home",
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.tv_outlined),
-          activeIcon: Icon(Icons.tv),
-          label: "TV Shows",
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.search_outlined),
-          activeIcon: Icon(Icons.search),
-          label: "Search",
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.settings_outlined),
-          activeIcon: Icon(Icons.settings),
-          label: "Settings",
-        ),
-      ],
     );
   }
 }

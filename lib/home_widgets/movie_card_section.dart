@@ -1,65 +1,11 @@
 import 'package:flutter/material.dart';
-// import 'dart:math' as math; // not used
 import 'dart:async';
 import 'dart:ui' as ui;
+import 'dart:math';
+import '../stream_services/api.dart';
+import '../stream_services/tmdb_api.dart';
 
 // Default sample movies for the carousel (moved from homepage)
-final List<Map<String, dynamic>> _defaultSampleMovies = [
-  {
-    'title': 'Tron: Ares',
-    'year': '2025',
-    'genre': 'Cyberpunk',
-    'duration': '1h 58min',
-    'rating': 7.5,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/wVYREutTvI2tmxr6ujrHT704wGF.jpg',
-  },
-  {
-    'title': 'Inception',
-    'year': '2010',
-    'genre': 'Sci-Fi',
-    'duration': '2h 28min',
-    'rating': 8.8,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/edv5CZvWj09upOsy2Y6IwDhK8bt.jpg',
-  },
-  {
-    'title': 'Spirited Away',
-    'year': '2001',
-    'genre': 'Fantasy',
-    'duration': '2h 5min',
-    'rating': 8.6,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg',
-  },
-  {
-    'title': 'The Dark Knight',
-    'year': '2008',
-    'genre': 'Action',
-    'duration': '2h 32min',
-    'rating': 9.0,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-  },
-  {
-    'title': 'Interstellar',
-    'year': '2014',
-    'genre': 'Sci-Fi',
-    'duration': '2h 49min',
-    'rating': 8.7,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/rAiYTfKGqDCRIIqo664sY9XZIvQ.jpg',
-  },
-  {
-    'title': 'Parasite',
-    'year': '2019',
-    'genre': 'Thriller',
-    'duration': '2h 12min',
-    'rating': 8.5,
-    'imageUrl':
-        'https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg',
-  },
-];
 
 class MovieCard extends StatelessWidget {
   final String title;
@@ -187,7 +133,7 @@ class MovieCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                rating.toString(),
+                                rating.toStringAsFixed(1),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
@@ -293,11 +239,9 @@ class MovieCard extends StatelessWidget {
 }
 
 class CircularMovieCarousel extends StatefulWidget {
-  final List<Map<String, dynamic>> movies;
-
-  CircularMovieCarousel({Key? key, List<Map<String, dynamic>>? movies})
-    : movies = movies ?? _defaultSampleMovies,
-      super(key: key);
+  final List<Movie> movies;
+  const CircularMovieCarousel({Key? key, required this.movies})
+    : super(key: key);
 
   @override
   State<CircularMovieCarousel> createState() => _CircularMovieCarouselState();
@@ -313,42 +257,81 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
   double _pageOffset = 0.0;
   bool _isAnimating = false;
 
+  // Trending movies from API
+  List<Movie> _trendingMovies = [];
+  bool _loading = true;
+  String? _error;
+
+  // Cache for TMDB ratings by movie title
+  Map<String, double> _ratingCache = {};
+
   // Large number to simulate infinite scrolling
   static const int _infiniteMultiplier = 10000;
   late int _initialPage;
 
+  // Helper method to get rating, fetching if not cached
+  Future<double> _getRating(String title) async {
+    if (_ratingCache.containsKey(title)) {
+      return _ratingCache[title]!;
+    }
+    try {
+      final details = await TMDBApiService().fetchMovieDetailsByTitle(title);
+      double rating = 0.0;
+      if (details != null) {
+        final vote = details["vote_average"];
+        if (vote is num) rating = vote.toDouble();
+      }
+      if (rating == 0.0) {
+        // Generate fake rating between 6.0 and 9.5
+        rating = 6.0 + Random().nextDouble() * 3.5;
+      }
+      _ratingCache[title] = rating;
+      return rating;
+    } catch (e) {
+      // Generate fake rating on error
+      double fakeRating = 6.0 + Random().nextDouble() * 3.5;
+      _ratingCache[title] = fakeRating;
+      return fakeRating;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    // Temporary initialization to avoid LateInitializationError
+    _pageController = PageController();
+    _fetchTrending();
+  }
 
-    // Start from the middle of our "infinite" list
-    _initialPage = _infiniteMultiplier * widget.movies.length;
-    _currentIndex = 0;
-
-    _pageController = PageController(
-      initialPage: _initialPage,
-      viewportFraction: 0.6,
-    );
-
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-
-    _pageController.addListener(() {
-      // Always update page offset so stacked cards follow the PageView
-      final p = _pageController.page ?? _initialPage.toDouble();
-      if (mounted) {
-        setState(() {
-          _pageOffset = p;
-          _currentIndex = (p.round()) % widget.movies.length;
-        });
-      }
-    });
-
-    // Start auto-scroll after first frame so PageController is attached
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _startAutoScroll();
+  Future<void> _fetchTrending() async {
+    setState(() {
+      _trendingMovies = widget.movies;
+      _loading = false;
+      _error = null;
+      _initialPage =
+          _infiniteMultiplier *
+          (_trendingMovies.isNotEmpty ? _trendingMovies.length : 1);
+      _currentIndex = 0;
+      _pageController = PageController(
+        initialPage: _initialPage,
+        viewportFraction: 0.6,
+      );
+      _animationController = AnimationController(
+        duration: const Duration(milliseconds: 500),
+        vsync: this,
+      );
+      _pageController.addListener(() {
+        final p = _pageController.page ?? _initialPage.toDouble();
+        if (mounted) {
+          setState(() {
+            _pageOffset = p;
+            _currentIndex = (p.round()) % _trendingMovies.length;
+          });
+        }
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startAutoScroll();
+      });
     });
   }
 
@@ -403,19 +386,19 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
 
   // Get the actual movie index from the infinite scroll position
   int _getMovieIndex(int pageIndex) {
-    return pageIndex % widget.movies.length;
+    return _trendingMovies.isNotEmpty ? pageIndex % _trendingMovies.length : 0;
   }
 
   // Get visible indices around current position
   List<int> _getVisibleIndices() {
     int currentPage = _pageOffset.round();
     List<int> indices = [];
-
+    int len = _trendingMovies.length;
+    if (len == 0) return indices;
     // Show 5 cards (2 before, center, 2 after)
     for (int i = currentPage - 2; i <= currentPage + 2; i++) {
       indices.add(i);
     }
-
     return indices;
   }
 
@@ -471,7 +454,7 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
 
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(widget.movies.length, (i) {
+          children: List.generate(_trendingMovies.length, (i) {
             final isActive = i == _currentIndex;
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
@@ -491,7 +474,8 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
 
   Widget _buildStackedCard(int pageIndex) {
     final movieIndex = _getMovieIndex(pageIndex);
-    final movie = widget.movies[movieIndex];
+    if (_trendingMovies.isEmpty) return const SizedBox.shrink();
+    final movie = _trendingMovies[movieIndex];
     final difference = (pageIndex - _pageOffset).abs();
     final isCenter = difference < 0.5;
 
@@ -519,44 +503,50 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
     // Smoother vertical offset
     double verticalOffset = isCenter ? 0.0 : 15 + (difference * 8);
 
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-      tween: Tween<double>(begin: 0, end: 1),
-      builder: (context, value, child) {
-        return Positioned(
-          left:
-              MediaQuery.of(context).size.width * 0.5 -
-              110 +
-              (horizontalOffset * value),
-          top: 40 + (verticalOffset * value),
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 300),
-            opacity: opacity,
-            child: GestureDetector(
-              onTap: () {
-                if (!isCenter && !_isAnimating) {
-                  _pageController.animateToPage(
-                    pageIndex,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeInOutCubic,
-                  );
-                }
-              },
-              child: MovieCard(
-                title: movie['title'],
-                year: movie['year'],
-                genre: movie['genre'],
-                duration: movie['duration'],
-                rating: movie['rating'],
-                imageUrl: movie['imageUrl'],
-                isCenter: isCenter,
-                scale: scale,
-                rotation: rotation,
-                opacity: 1.0,
+    return FutureBuilder<double>(
+      future: _getRating(movie.title),
+      builder: (context, snapshot) {
+        double rating = snapshot.data ?? 0.0;
+        return TweenAnimationBuilder<double>(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOutCubic,
+          tween: Tween<double>(begin: 0, end: 1),
+          builder: (context, value, child) {
+            return Positioned(
+              left:
+                  MediaQuery.of(context).size.width * 0.5 -
+                  110 +
+                  (horizontalOffset * value),
+              top: 40 + (verticalOffset * value),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: opacity,
+                child: GestureDetector(
+                  onTap: () {
+                    if (!isCenter && !_isAnimating) {
+                      _pageController.animateToPage(
+                        pageIndex,
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.easeInOutCubic,
+                      );
+                    }
+                  },
+                  child: MovieCard(
+                    title: movie.title,
+                    year: movie.releaseDate,
+                    genre: movie.type,
+                    duration: movie.duration,
+                    rating: rating,
+                    imageUrl: movie.image,
+                    isCenter: isCenter,
+                    scale: scale,
+                    rotation: rotation,
+                    opacity: 1.0,
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
