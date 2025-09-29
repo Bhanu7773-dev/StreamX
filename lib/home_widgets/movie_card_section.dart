@@ -4,10 +4,12 @@ import 'dart:ui' as ui;
 import 'dart:math';
 import '../stream_services/api.dart';
 import '../stream_services/tmdb_api.dart';
+import '../screens/movie_play_page.dart';
 
 // Default sample movies for the carousel (moved from homepage)
 
 class MovieCard extends StatelessWidget {
+  final Movie movie;
   final String title;
   final String year;
   final String genre;
@@ -21,6 +23,7 @@ class MovieCard extends StatelessWidget {
 
   const MovieCard({
     Key? key,
+    required this.movie,
     required this.title,
     required this.year,
     required this.genre,
@@ -65,21 +68,88 @@ class MovieCard extends StatelessWidget {
                 children: [
                   // Movie poster
                   Positioned.fill(
-                    child: Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.grey[800]!, Colors.grey[600]!],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                    child: Hero(
+                      key: ValueKey('hero-${movie.title}'),
+                      tag: 'movie-poster-${movie.title}',
+                      createRectTween: (Rect? begin, Rect? end) {
+                        return RectTween(begin: begin, end: end);
+                      },
+                      flightShuttleBuilder:
+                          (
+                            BuildContext flightContext,
+                            Animation<double> animation,
+                            HeroFlightDirection flightDirection,
+                            BuildContext fromHeroContext,
+                            BuildContext toHeroContext,
+                          ) {
+                            return AnimatedBuilder(
+                              animation: animation,
+                              builder: (context, child) {
+                                // Use curved animation for smoother transition
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOutCubic,
+                                );
+
+                                // Interpolate border radius consistently throughout animation
+                                double radius;
+                                if (flightDirection ==
+                                    HeroFlightDirection.push) {
+                                  // Forward: 20 → 12 (movie card uses 20 radius)
+                                  radius = 20.0 - (8.0 * curvedAnimation.value);
+                                } else {
+                                  // Reverse: 12 → 20
+                                  radius = 12.0 + (8.0 * curvedAnimation.value);
+                                }
+
+                                return Material(
+                                  color: Colors.transparent,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(radius),
+                                    child: Image.network(
+                                      imageUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    colors: [
+                                                      Colors.grey[800]!,
+                                                      Colors.grey[600]!,
+                                                    ],
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
+                                                  ),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.movie,
+                                                  size: 60,
+                                                  color: Colors.white24,
+                                                ),
+                                              ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.grey[800]!, Colors.grey[600]!],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                           ),
-                        ),
-                        child: const Icon(
-                          Icons.movie,
-                          size: 60,
-                          color: Colors.white24,
+                          child: const Icon(
+                            Icons.movie,
+                            size: 60,
+                            color: Colors.white24,
+                          ),
                         ),
                       ),
                     ),
@@ -208,34 +278,34 @@ class MovieCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildTag(String text, IconData icon) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white24, width: 0.5),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 12, color: Colors.white70),
-              const SizedBox(width: 6),
-              Text(
-                text,
-                style: const TextStyle(color: Colors.white, fontSize: 10),
-              ),
-            ],
-          ),
+Widget _buildTag(String text, IconData icon) {
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(8),
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white24, width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: Colors.white70),
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: const TextStyle(color: Colors.white, fontSize: 10),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class CircularMovieCarousel extends StatefulWidget {
@@ -259,8 +329,6 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
 
   // Trending movies from API
   List<Movie> _trendingMovies = [];
-  bool _loading = true;
-  String? _error;
 
   // Cache for TMDB ratings by movie title
   Map<String, double> _ratingCache = {};
@@ -306,8 +374,6 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
   Future<void> _fetchTrending() async {
     setState(() {
       _trendingMovies = widget.movies;
-      _loading = false;
-      _error = null;
       _initialPage =
           _infiniteMultiplier *
           (_trendingMovies.isNotEmpty ? _trendingMovies.length : 1);
@@ -416,38 +482,33 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          onTapDown: (_) => _pauseAutoScrollTemporarily(),
-          onTapUp: (_) => _pauseAutoScrollTemporarily(),
-          onTapCancel: () => _pauseAutoScrollTemporarily(),
-          child: NotificationListener<ScrollStartNotification>(
-            onNotification: (notification) {
-              _pauseAutoScrollTemporarily();
-              return false;
-            },
-            child: SizedBox(
-              height: 375,
-              child: Stack(
-                children: [
-                  // Stack cards so the center card is always on top
-                  ...visibleIndices.map((index) => _buildStackedCard(index)),
+        NotificationListener<ScrollStartNotification>(
+          onNotification: (notification) {
+            _pauseAutoScrollTemporarily();
+            return false;
+          },
+          child: SizedBox(
+            height: 375,
+            child: Stack(
+              children: [
+                // Main PageView with infinite scrolling
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: null, // null for infinite scrolling
+                  physics: const BouncingScrollPhysics(),
+                  onPageChanged: (index) {
+                    setState(() {
+                      _currentIndex = _getMovieIndex(index);
+                    });
+                  },
+                  itemBuilder: (context, index) {
+                    return Container(); // Transparent container for PageView
+                  },
+                ),
 
-                  // Main PageView with infinite scrolling
-                  PageView.builder(
-                    controller: _pageController,
-                    itemCount: null, // null for infinite scrolling
-                    physics: const BouncingScrollPhysics(),
-                    onPageChanged: (index) {
-                      setState(() {
-                        _currentIndex = _getMovieIndex(index);
-                      });
-                    },
-                    itemBuilder: (context, index) {
-                      return Container(); // Transparent container for PageView
-                    },
-                  ),
-                ],
-              ),
+                // Stack cards so the center card is always on top
+                ...visibleIndices.map((index) => _buildStackedCard(index)),
+              ],
             ),
           ),
         ),
@@ -522,16 +583,58 @@ class _CircularMovieCarouselState extends State<CircularMovieCarousel>
                 duration: const Duration(milliseconds: 300),
                 opacity: opacity,
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () {
+                    print('Card tapped: ${movie.title}');
+                    print('isCenter: $isCenter');
+                    print('isAnimating: $_isAnimating');
+                    print('pageIndex: $pageIndex, pageOffset: $_pageOffset');
+                    print('difference: ${(pageIndex - _pageOffset).abs()}');
+
                     if (!isCenter && !_isAnimating) {
+                      print('Animating to center...');
                       _pageController.animateToPage(
                         pageIndex,
                         duration: const Duration(milliseconds: 500),
                         curve: Curves.easeInOutCubic,
                       );
+                    } else if (isCenter) {
+                      print('Navigating to MoviePlayPage...');
+                      // Pause auto-scroll before navigation
+                      _pauseAutoScrollTemporarily();
+                      // Navigate to MoviePlayPage when center card is tapped
+                      Navigator.push(
+                        context,
+                        PageRouteBuilder(
+                          pageBuilder:
+                              (context, animation, secondaryAnimation) =>
+                                  MoviePlayPage(movie: movie),
+                          transitionDuration: const Duration(milliseconds: 800),
+                          reverseTransitionDuration: const Duration(
+                            milliseconds: 800,
+                          ),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                );
+                              },
+                        ),
+                      ).then((_) {
+                        // Resume auto-scroll after returning from MoviePlayPage
+                        if (mounted) {
+                          Future.delayed(const Duration(milliseconds: 500), () {
+                            if (mounted) _startAutoScroll();
+                          });
+                          // Force rebuild to refresh the UI state
+                          setState(() {});
+                        }
+                      });
                     }
                   },
                   child: MovieCard(
+                    movie: movie,
                     title: movie.title,
                     year: movie.releaseDate,
                     genre: movie.type,

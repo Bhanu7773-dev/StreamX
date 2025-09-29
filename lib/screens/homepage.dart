@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import '../home_widgets/movie_card_section.dart'; // Update this import
 import '../home_widgets/trending_section.dart';
+import '../home_widgets/genre_section.dart';
 import '../hybrrid/navbar.dart';
 import '../stream_services/api.dart';
 
 class HomePage extends StatefulWidget {
   final List<Movie> carouselMovies;
   final List<Movie> remainingMovies;
+  final Map<String, List<Movie>> genreMovies;
   const HomePage({
     super.key,
     required this.carouselMovies,
     required this.remainingMovies,
+    required this.genreMovies,
   });
 
   @override
@@ -109,8 +112,17 @@ class _HomePageState extends State<HomePage> {
           // Circular Movie Carousel (no header)
           CircularMovieCarousel(movies: widget.carouselMovies),
 
+          // Genre Section
+          GenreSection(
+            movies: widget.remainingMovies,
+            genreMovies: widget.genreMovies,
+          ),
+
           // Trending Section moved to home_widgets/trending_section.dart
           TrendingNow(movies: widget.remainingMovies),
+
+          // Add space for navbar
+          const SizedBox(height: 100),
         ],
       ),
     );

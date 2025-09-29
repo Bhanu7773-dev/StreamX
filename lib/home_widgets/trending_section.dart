@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'dart:math';
 import '../stream_services/api.dart';
 import '../stream_services/tmdb_api.dart';
+import '../screens/movie_play_page.dart';
 
 class TrendingNow extends StatefulWidget {
   final List<Movie>? movies;
@@ -118,14 +119,7 @@ class _TrendingNowState extends State<TrendingNow> {
                 future: _getRating(movie.title),
                 builder: (context, snapshot) {
                   double rating = snapshot.data ?? 0.0;
-                  return _TrendingCard(
-                    title: movie.title,
-                    year: movie.releaseDate,
-                    genre: movie.type,
-                    duration: movie.duration,
-                    rating: rating,
-                    imageUrl: movie.image,
-                  );
+                  return _TrendingCard(movie: movie, rating: rating);
                 },
               );
             },
@@ -138,124 +132,192 @@ class _TrendingNowState extends State<TrendingNow> {
 }
 
 class _TrendingCard extends StatelessWidget {
-  final String title;
-  final String year;
-  final String genre;
-  final String duration;
+  final Movie movie;
   final double rating;
-  final String imageUrl;
 
-  const _TrendingCard({
-    Key? key,
-    required this.title,
-    required this.year,
-    required this.genre,
-    required this.duration,
-    required this.rating,
-    required this.imageUrl,
-  }) : super(key: key);
+  const _TrendingCard({Key? key, required this.movie, required this.rating})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 260,
-      margin: const EdgeInsets.only(right: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(34),
-            child: Container(
-              height: 290,
-              decoration: BoxDecoration(
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Image.network(
-                      imageUrl,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey[800],
-                        child: const Icon(Icons.movie, color: Colors.white24),
-                      ),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                MoviePlayPage(movie: movie),
+            transitionDuration: const Duration(
+              milliseconds: 600,
+            ), // Slower Hero animation
+            reverseTransitionDuration: const Duration(
+              milliseconds: 600,
+            ), // Slower reverse animation
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+          ),
+        );
+      },
+      child: Container(
+        width: 260,
+        margin: const EdgeInsets.only(right: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(34),
+              child: Container(
+                height: 290,
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
-                  ),
-                  // Subtle dark overlay to increase contrast for pills
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.35),
-                        borderRadius: BorderRadius.circular(34),
-                      ),
-                    ),
-                  ),
-                  // Rating badge (frosted glass) - same style as carousel
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white24,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.star,
-                                size: 14,
-                                color: Colors.redAccent,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                rating.toStringAsFixed(1),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                  ],
+                ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Hero(
+                        tag: 'movie-poster-${movie.title}',
+                        createRectTween: (Rect? begin, Rect? end) {
+                          return RectTween(begin: begin, end: end);
+                        },
+                        flightShuttleBuilder:
+                            (
+                              BuildContext flightContext,
+                              Animation<double> animation,
+                              HeroFlightDirection flightDirection,
+                              BuildContext fromHeroContext,
+                              BuildContext toHeroContext,
+                            ) {
+                              return AnimatedBuilder(
+                                animation: animation,
+                                builder: (context, child) {
+                                  // Use curved animation for smoother transition
+                                  final curvedAnimation = CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeInOutCubic,
+                                  );
+
+                                  // Interpolate border radius consistently throughout animation
+                                  double radius;
+                                  if (flightDirection ==
+                                      HeroFlightDirection.push) {
+                                    // Forward: 34 → 12
+                                    radius =
+                                        34.0 - (22.0 * curvedAnimation.value);
+                                  } else {
+                                    // Reverse: 12 → 34
+                                    radius =
+                                        12.0 + (22.0 * curvedAnimation.value);
+                                  }
+
+                                  return Material(
+                                    color: Colors.transparent,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(
+                                        radius,
+                                      ),
+                                      child: Image.network(
+                                        movie.image,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Container(
+                                                  color: Colors.grey[800],
+                                                  child: const Icon(
+                                                    Icons.movie,
+                                                    color: Colors.white24,
+                                                  ),
+                                                ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(34),
+                          child: Image.network(
+                            movie.image,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                                  color: Colors.grey[800],
+                                  child: const Icon(
+                                    Icons.movie,
+                                    color: Colors.white24,
+                                  ),
                                 ),
-                              ),
-                            ],
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  // Frosted glass pill (bottom-center) - tappable
-                  Positioned(
-                    bottom: 4,
-                    left: 4,
-                    right: 4,
-                    child: GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Selected "$title"'),
-                            duration: const Duration(seconds: 2),
+                    // Subtle dark overlay to increase contrast for pills
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.35),
+                          borderRadius: BorderRadius.circular(34),
+                        ),
+                      ),
+                    ),
+                    // Rating badge (frosted glass) - same style as carousel
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white24,
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star,
+                                  size: 14,
+                                  color: Colors.redAccent,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  rating.toStringAsFixed(1),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        );
-                      },
+                        ),
+                      ),
+                    ),
+                    // Frosted glass pill (bottom-center) - now displays info without gesture
+                    Positioned(
+                      bottom: 4,
+                      left: 4,
+                      right: 4,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(40),
                         child: BackdropFilter(
@@ -292,7 +354,7 @@ class _TrendingCard extends StatelessWidget {
                                             MainAxisAlignment.start,
                                         children: [
                                           Text(
-                                            genre,
+                                            movie.type,
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 12,
@@ -302,7 +364,7 @@ class _TrendingCard extends StatelessWidget {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            title,
+                                            movie.title,
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 16,
@@ -315,41 +377,27 @@ class _TrendingCard extends StatelessWidget {
                                       ),
                                     ),
                                   ),
-                                  // Play button inside circular container
-                                  GestureDetector(
-                                    onTap: () {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Play trailer for "$title"',
-                                          ),
-                                          duration: const Duration(seconds: 2),
-                                        ),
-                                      );
-                                    },
-                                    child: Container(
-                                      width: 60,
-                                      height: 60,
-                                      margin: const EdgeInsets.only(
-                                        left: 12.0,
-                                        right: 2.0,
+                                  // Play button inside circular container - visual only
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    margin: const EdgeInsets.only(
+                                      left: 12.0,
+                                      right: 2.0,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.12),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white24,
+                                        width: 0.5,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.12),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white24,
-                                          width: 0.5,
-                                        ),
-                                      ),
-                                      child: const Center(
-                                        child: Icon(
-                                          Icons.play_arrow,
-                                          color: Colors.white,
-                                          size: 30,
-                                        ),
+                                    ),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.play_arrow,
+                                        color: Colors.white,
+                                        size: 30,
                                       ),
                                     ),
                                   ),
@@ -360,13 +408,13 @@ class _TrendingCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-        ],
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../screens/homepage.dart';
 import '../stream_services/api.dart';
+import '../stream_services/tmdb_api.dart';
 
 class HomeLoadingScreen extends StatefulWidget {
   const HomeLoadingScreen({Key? key}) : super(key: key);
@@ -17,6 +18,7 @@ class _HomeLoadingScreenState extends State<HomeLoadingScreen>
 
   List<Movie> _carouselMovies = [];
   List<Movie> _remainingMovies = [];
+  Map<String, List<Movie>> _genreMovies = {};
 
   // Animation controllers
   late AnimationController _pulseController;
@@ -149,8 +151,8 @@ class _HomeLoadingScreenState extends State<HomeLoadingScreen>
       await _animateProgress(0.8);
       setState(() => _quoteIndex = 3);
 
-      // Step 2: Simulate additional loading (e.g., pre-fetch ratings if needed)
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Step 3: Fetch genre movies
+      await _fetchGenreMovies();
       await _animateProgress(1.0);
       setState(() => _quoteIndex = 4);
 
@@ -168,6 +170,7 @@ class _HomeLoadingScreenState extends State<HomeLoadingScreen>
               pageBuilder: (context, animation, secondaryAnimation) => HomePage(
                 carouselMovies: _carouselMovies,
                 remainingMovies: _remainingMovies,
+                genreMovies: _genreMovies,
               ),
               transitionsBuilder:
                   (context, animation, secondaryAnimation, child) {
@@ -187,8 +190,11 @@ class _HomeLoadingScreenState extends State<HomeLoadingScreen>
         if (mounted) {
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) =>
-                  HomePage(carouselMovies: [], remainingMovies: []),
+              pageBuilder: (context, animation, secondaryAnimation) => HomePage(
+                carouselMovies: [],
+                remainingMovies: [],
+                genreMovies: {},
+              ),
               transitionsBuilder:
                   (context, animation, secondaryAnimation, child) {
                     return FadeTransition(opacity: animation, child: child);
@@ -199,6 +205,102 @@ class _HomeLoadingScreenState extends State<HomeLoadingScreen>
         }
       });
     }
+  }
+
+  Future<void> _fetchGenreMovies() async {
+    final genres = [
+      'Action',
+      'Comedy',
+      'Drama',
+      'Horror',
+      'Romance',
+      'Thriller',
+      'Sci-Fi',
+    ];
+    final genreIds = {
+      'Action': 28,
+      'Comedy': 35,
+      'Drama': 18,
+      'Horror': 27,
+      'Romance': 10749,
+      'Thriller': 53,
+      'Sci-Fi': 878,
+    };
+
+    for (final genre in genres) {
+      final genreId = genreIds[genre];
+      if (genreId != null) {
+        try {
+          final tmdbMovies = await TMDBApiService().fetchMoviesByGenre(genreId);
+          _genreMovies[genre] = tmdbMovies
+              .take(20)
+              .map(
+                (m) => Movie(
+                  id: m['id'].toString(),
+                  title: m['title'] ?? 'Unknown',
+                  url: '',
+                  image:
+                      'https://image.tmdb.org/t/p/w500${m['poster_path'] ?? ''}',
+                  releaseDate: m['release_date'] ?? 'Unknown',
+                  duration: '120 min',
+                  type: genre,
+                ),
+              )
+              .toList();
+        } catch (e) {
+          // On error, use empty list for this genre
+          _genreMovies[genre] = [];
+        }
+      }
+    }
+
+    // Also fetch popular movies for 'ALL'
+    try {
+      final tmdbMovies = await TMDBApiService().fetchPopularMovies();
+      _genreMovies['ALL'] = tmdbMovies
+          .take(20)
+          .map(
+            (m) => Movie(
+              id: m['id'].toString(),
+              title: m['title'] ?? 'Unknown',
+              url: '',
+              image: 'https://image.tmdb.org/t/p/w500${m['poster_path'] ?? ''}',
+              releaseDate: m['release_date'] ?? 'Unknown',
+              duration: '120 min',
+              type: m['genre_ids']?.isNotEmpty == true
+                  ? _getGenreName(m['genre_ids'][0])
+                  : 'Unknown',
+            ),
+          )
+          .toList();
+    } catch (e) {
+      _genreMovies['ALL'] = [];
+    }
+  }
+
+  String _getGenreName(int id) {
+    const genreMap = {
+      28: 'Action',
+      12: 'Adventure',
+      16: 'Animation',
+      35: 'Comedy',
+      80: 'Crime',
+      99: 'Documentary',
+      18: 'Drama',
+      10751: 'Family',
+      14: 'Fantasy',
+      36: 'History',
+      27: 'Horror',
+      10402: 'Music',
+      9648: 'Mystery',
+      10749: 'Romance',
+      878: 'Sci-Fi',
+      10770: 'TV Movie',
+      53: 'Thriller',
+      10752: 'War',
+      37: 'Western',
+    };
+    return genreMap[id] ?? 'Unknown';
   }
 
   @override

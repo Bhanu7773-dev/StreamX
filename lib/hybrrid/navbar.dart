@@ -102,7 +102,7 @@ class _StreamXNavBarState extends State<StreamXNavBar>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(34),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
                 child: Container(
                   height: 80,
                   decoration: BoxDecoration(
@@ -110,12 +110,15 @@ class _StreamXNavBarState extends State<StreamXNavBar>
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.white.withOpacity(0.20),
-                        Colors.white.withOpacity(0.08),
+                        Colors.white.withOpacity(0.00),
+                        Colors.white.withOpacity(0.00),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(34),
-                    border: Border.all(color: Colors.transparent, width: 0),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.08),
@@ -155,8 +158,8 @@ class _StreamXNavBarState extends State<StreamXNavBar>
                               ),
                               borderRadius: BorderRadius.circular(26),
                               border: Border.all(
-                                color: Colors.transparent,
-                                width: 0,
+                                color: Colors.white.withOpacity(0.2),
+                                width: 1,
                               ),
                               boxShadow: [
                                 BoxShadow(
